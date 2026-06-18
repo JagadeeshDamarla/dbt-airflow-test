@@ -1,0 +1,11 @@
+customer_id,first_name,last_name,city,state,signup_date,account_tier,lifetime_value
+1,Ava,Patel,Austin,TX,2024-01-15,gold,1250.50
+2,Liam,Nguyen,Seattle,WA,2024-02-03,silver,845.20
+3,Noah,Johnson,Denver,CO,2024-02-19,bronze,315.75
+4,Emma,Garcia,Miami,FL,2024-03-11,gold,2210.00
+5,Olivia,Kim,Chicago,IL,2024-03-22,silver,980.10
+6,Elijah,Brown,Phoenix,AZ,2024-04-05,bronze,450.00
+7,Sophia,Davis,Boston,MA,2024-04-27,gold,1755.35
+8,James,Wilson,Portland,OR,2024-05-09,silver,690.40
+9,Isabella,Martinez,Atlanta,GA,2024-05-18,bronze,275.95
+10,Benjamin,Anderson,San Diego,CA,2024-06-01,gold,3105.80
