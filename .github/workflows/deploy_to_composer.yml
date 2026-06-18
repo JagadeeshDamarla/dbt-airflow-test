@@ -5,11 +5,17 @@ on:
     branches:
       - main
     paths:
-      - 'dbt_airflow_test/**' # Only trigger if dbt files change
+      - 'dbt_airflow_test/**'
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    
+    # CRITICAL: These permissions are required for Workload Identity Federation
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -17,12 +23,10 @@ jobs:
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
-          credentials_json: '${{ secrets.GCP_SA_KEY }}'
-          # If using Workload Identity Federation (best practice), replace the line above with:
-          # workload_identity_provider: 'projects/123456789/locations/global/workloadIdentityPools/my-pool/providers/my-provider'
-          # service_account: 'my-service-account@my-project.iam.gserviceaccount.com'
+          # Replace YOUR_PROJECT_NUMBER and YOUR_PROJECT_ID below!
+          workload_identity_provider: 'projects/YOUR_PROJECT_NUMBER/locations/global/workloadIdentityPools/github-actions-pool/providers/github-provider'
+          service_account: 'github-actions-composer-deploy@YOUR_PROJECT_ID.iam.gserviceaccount.com'
 
       - name: Sync dbt project to Composer GCS bucket
-        # Using gsutil to perform an rsync, which only updates changed files and deletes removed ones
         run: |
           gsutil rsync -r -d ./dbt_airflow_test gs://your-composer-bucket-name/data/dbt_airflow_test
