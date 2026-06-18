@@ -1,6 +1,6 @@
 {{ config(materialized='view') }}
 
--- cte in
+-- cte in view
 with customer_seed as (
 
     select *

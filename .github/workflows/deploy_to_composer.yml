@@ -25,7 +25,7 @@ jobs:
         with:
           # Replace YOUR_PROJECT_NUMBER and YOUR_PROJECT_ID below!
           workload_identity_provider: 'projects/845747503849/locations/global/workloadIdentityPools/github-actions-pool/providers/github-provider'
-          service_account: 'github-actions-composer-deploy@YOUR_PROJECT_ID.iam.gserviceaccount.com'
+          service_account: 'github-actions-composer-deploy@test-and-try-499509.iam.gserviceaccount.com'
 
       - name: Sync dbt project to Composer GCS bucket
         run: |
