@@ -29,4 +29,5 @@ jobs:
 
       - name: Sync dbt project to Composer GCS bucket
         run: |
-          gsutil rsync -r -d ./dbt_airflow_test gs://dbt_test_bucket184567/data/dbt_airflow_test
+          gcloud storage rsync ./dbt_airflow_test gs://dbt_test_bucket184567/data/dbt_airflow_test --recursive --delete-unmatched-destination-objects
+          
