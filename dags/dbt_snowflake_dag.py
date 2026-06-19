@@ -32,17 +32,23 @@ with DAG(
         bash_command=f'cd {DBT_PROJECT_DIR} && dbt deps --profiles-dir .'
     )
 
-    # Task 3: Execute the models
+    # Task 3: Load seed data into Snowflake
+    dbt_seed = BashOperator(
+        task_id='dbt_seed',
+        bash_command=f'cd {DBT_PROJECT_DIR} && dbt seed --profiles-dir .'
+    )
+
+    # Task 4: Execute the models
     dbt_run = BashOperator(
         task_id='dbt_run',
         bash_command=f'cd {DBT_PROJECT_DIR} && dbt run --profiles-dir .'
     )
 
-    # Task 4: Run your dbt tests
+    # Task 5: Run your dbt tests
     dbt_test = BashOperator(
         task_id='dbt_test',
         bash_command=f'cd {DBT_PROJECT_DIR} && dbt test --profiles-dir .'
     )
 
     # Define the execution order
-    dbt_debug >> dbt_deps >> dbt_run >> dbt_test
+    dbt_debug >> dbt_deps >> dbt_seed >> dbt_run >> dbt_test
