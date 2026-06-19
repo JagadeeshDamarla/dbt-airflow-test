@@ -27,7 +27,12 @@ jobs:
           workload_identity_provider: 'projects/845747503849/locations/global/workloadIdentityPools/github-actions-pool/providers/github-provider'
           service_account: 'github-actions-composer-deploy@test-and-try-499509.iam.gserviceaccount.com'
 
-      - name: Sync dbt project to Composer GCS bucket
+      # Step 1: Deploy the Airflow DAG to the /dags folder
+      - name: Deploy Airflow DAGs
         run: |
-          gcloud storage rsync ./dbt_airflow_test gs://dbt_test_bucket184567/data/dbt_airflow_test --recursive --delete-unmatched-destination-objects
-          
+          gcloud storage rsync ./dags gs://dbt_airflow_test_composer/dags --recursive --delete-unmatched-destination-objects
+
+      # Step 2: Deploy the dbt project to the /data folder
+      - name: Deploy dbt Project
+        run: |
+          gcloud storage rsync ./dbt_airflow_test gs://dbt_airflow_test_composer/data/dbt_airflow_test --recursive --delete-unmatched-destination-objects
