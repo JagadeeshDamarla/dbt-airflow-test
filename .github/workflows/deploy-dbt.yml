@@ -19,6 +19,9 @@ jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
 
+    # for secrets in github
+    environment: prod
+
     permissions:
       contents: "read"
       id-token: "write"
@@ -65,6 +68,7 @@ jobs:
           job: ${{ env.JOB_NAME }}
           image: ${{ env.IMAGE_TAG }}
           region: ${{ env.GAR_LOCATION }}
+          flags: --max-retries=0
           env_vars: |-
             SNOWFLAKE_ACCOUNT=${{ secrets.SNOWFLAKE_ACCOUNT }}
             SNOWFLAKE_USER=${{ secrets.SNOWFLAKE_USER }}
