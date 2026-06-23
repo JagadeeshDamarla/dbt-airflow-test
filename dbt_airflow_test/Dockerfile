@@ -8,15 +8,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements from your nested subfolder
-COPY dbt_airflow_test/requirements.txt .
+# 1. FIX: Copy requirements.txt directly from the current context folder
+# (If it's inside a 'dbt_models' folder right here, change this to: COPY dbt_models/requirements.txt .)
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy only the nested dbt project contents into the working directory
-COPY dbt_airflow_test/ .
+# 2. FIX: Copy all project files directly from the current context folder
+COPY . .
 
-# Point to where profiles.yml lives inside the container
+# Set profile directory environment variable
 ENV DBT_PROFILES_DIR=/usr/app/dbt
 
-# Default command for the Cloud Run Job
+# Default command to run
 CMD ["dbt", "build"]
