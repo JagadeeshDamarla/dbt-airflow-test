@@ -12,7 +12,7 @@ env:
   IMAGE_NAME: "dbt-snowflake"                # The container image name
   JOB_NAME: "dbt-snowflake-production-job"   # Name of the Cloud Run Job
   # Paste your Workload Identity Provider string from your Cloud Shell setup:
-  WIF_PROVIDER: "projects/995265336172/locations/global/workloadIdentityPools/github-dbt-pool/providers/github-dbt-provider
+  WIF_PROVIDER: "projects/995265336172/locations/global/workloadIdentityPools/github-dbt-pool/providers/github-dbt-provider"
   GCP_SERVICE_ACCOUNT: "github-actions-dbt@YOUR_GCP_PROJECT_ID.iam.gserviceaccount.com"
 
 jobs:
