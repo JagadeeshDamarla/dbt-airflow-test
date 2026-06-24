@@ -1,70 +1,141 @@
-# Run Airflow Locally and Execute dbt in DAG
+# Running dbt Models Locally via Airflow
 
-This guide explains how to run Airflow locally with Docker Compose and execute your dbt project from Airflow tasks.
+Both Airflow and dbt run locally inside Docker containers. Airflow orchestrates the dbt commands via a DAG, and the dbt project is mounted directly into the containers — no cloud infrastructure needed.
 
-## 1) Repository prerequisites
+---
 
-- Docker Desktop running.
-- At least 4 GB memory and 2 CPU allocated to Docker.
-- Open port 8080 for Airflow UI.
+## How it works
 
-Your repository already contains:
+```
+docker compose up
+  → Airflow (webserver + scheduler + worker) starts in Docker
+  → dbt project folder is mounted into the worker container
+  → DAG dbt_snowflake_pipeline is available in the Airflow UI
+  → Trigger the DAG → runs: dbt deps → dbt seed → dbt run → dbt test
+  → Results land in your Snowflake schema
+```
 
-- docker-compose.yaml
-- dags/dbt_snowflake_dag.py
-- dbt_airflow_test/ (dbt project)
+```mermaid
+flowchart LR
+    A([docker compose up]) --> B[Airflow\nwebserver + scheduler + worker]
+    B -->|mounts dbt project| C[dbt in worker container]
+    C --> D[dbt deps]
+    D --> E[dbt seed]
+    E --> F[dbt run]
+    F --> G[dbt test]
+    G --> H[(Snowflake)]
 
-The docker-compose file mounts your dbt project to:
+    style A fill:#24292e,color:#fff
+    style B fill:#017CEE,color:#fff
+    style C fill:#FF6B35,color:#fff
+    style D fill:#FF6B35,color:#fff
+    style E fill:#FF6B35,color:#fff
+    style F fill:#FF6B35,color:#fff
+    style G fill:#FF6B35,color:#fff
+    style H fill:#29B5E8,color:#fff
+```
 
-- /home/airflow/gcs/data/dbt_airflow_test
+---
 
-This is the same path your DAG uses.
+## Project structure
 
-## 2) Package version strategy for local Airflow
+```
+dbt-airflow-test/
+├── dags/
+│   └── dbt_snowflake_dag.py      ← Airflow DAG (dbt deps → seed → run → test)
+├── dbt_airflow_test/             ← dbt project, mounted into the worker container
+│   ├── models/
+│   ├── seeds/
+│   └── profiles.yml              ← Reads credentials from env vars set by the DAG
+├── Dockerfile                    ← Custom Airflow image with dbt installed
+└── docker-compose.yaml           ← Spins up Airflow + Postgres + Redis
+```
 
-Your local setup currently uses _PIP_ADDITIONAL_REQUIREMENTS with older dbt-snowflake version.
-For reliable behavior, align local Airflow image dependencies with your target runtime.
+The `docker-compose.yaml` mounts `dbt_airflow_test/` to `/home/airflow/gcs/data/dbt_airflow_test` inside every container. That is the path the DAG uses.
 
-Recommended versions:
+---
 
-- dbt-core==1.11.11
-- dbt-snowflake==1.11.5
-- protobuf>=4.25,<6
+## Step 1 — Prerequisites
 
-Important:
+- Docker Desktop installed and running
+- At least **4 GB memory** and **2 CPUs** allocated to Docker
+- Port **8080** free (Airflow UI)
+- A Snowflake account with a role, warehouse, database, and schema already created
 
-- Avoid protobuf 6.x with dbt-core 1.11.x.
+---
 
-## 3) Choose one way to install dbt in local Airflow containers
+## Step 2 — Build the custom Airflow image
 
-### Option A (recommended): build a custom Airflow image
+The root `Dockerfile` extends the official Airflow image and installs dbt:
 
-1. Update Dockerfile to install pinned dbt packages.
-2. In docker-compose.yaml, comment image and enable build.
-3. Build and start services.
+```dockerfile
+FROM apache/airflow:2.11.1
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends git && apt-get clean
+USER airflow
+RUN pip install --no-cache-dir \
+    "dbt-core==1.11.11" \
+    "dbt-snowflake==1.11.5" \
+    "protobuf>=4.25,<6"
+```
 
-### Option B (quick tests): _PIP_ADDITIONAL_REQUIREMENTS in .env
+> **Note:** Keep `protobuf` below version 6. Using protobuf 6.x with dbt-core 1.11.x causes `MessageToJson()` errors.
 
-Use _PIP_ADDITIONAL_REQUIREMENTS only for short-lived testing because packages are resolved at container startup.
+In `docker-compose.yaml`, make sure the `build` line is active instead of the pre-built `image` line:
 
-## 4) Configure Snowflake credentials for local Airflow
+```yaml
+# Comment out this line:
+# image: ${AIRFLOW_IMAGE_NAME:-apache/airflow:2.11.1}
 
-Your DAG reads Airflow Variables and exports them as environment variables for dbt.
-Set these in Airflow UI (Admin -> Variables):
+# Uncomment this line:
+build: .
+```
 
-- snowflake_account
-- snowflake_user
-- snowflake_password
-- snowflake_role
-- snowflake_database
-- snowflake_warehouse
-- snowflake_schema
+Then build the image from the repository root:
 
-Your dbt profile dbt_airflow_test/profiles.yml maps these to Snowflake connection fields.
+```bash
+docker compose build --no-cache
+```
 
-## 5) Start local Airflow
+---
 
-From repository root:
+## Step 3 — Add Snowflake credentials to Airflow
+
+The DAG reads Snowflake credentials from **Airflow Variables** and injects them as environment variables for dbt.
+
+First start the services (next step), then go to **Airflow UI → Admin → Variables** and add:
+
+| Key | Value |
+|---|---|
+| `snowflake_account` | Your Snowflake account identifier |
+| `snowflake_user` | Snowflake username |
+| `snowflake_password` | Snowflake password |
+| `snowflake_role` | Snowflake role |
+| `snowflake_database` | Target database |
+| `snowflake_warehouse` | Compute warehouse |
+| `snowflake_schema` | Target schema |
+
+> **Tip:** You can bulk-import all variables at once via **Admin → Variables → Import Variables** using a JSON file. Create a file (e.g. `airflow_variables.json`) with the following structure and upload it:
+>
+> ```json
+> {
+>   "snowflake_account": "your_account",
+>   "snowflake_user": "your_user",
+>   "snowflake_password": "your_password",
+>   "snowflake_role": "your_role",
+>   "snowflake_database": "your_database",
+>   "snowflake_warehouse": "your_warehouse",
+>   "snowflake_schema": "your_schema"
+> }
+> ```
+>
+> Keep this file out of version control — add it to `.gitignore`.
+
+---
+
+## Step 4 — Start Airflow
+
+From the repository root, initialise the database (first time only):
 
 ```bash
 docker compose up airflow-init
@@ -76,127 +147,74 @@ Then start all services:
 docker compose up -d
 ```
 
-Open Airflow UI:
+Open the Airflow UI at **http://localhost:8080**
 
-- http://localhost:8080
-- Default user/password in your compose setup: airflow / airflow (unless changed).
+- Username: `airflow`
+- Password: `airflow`
 
-## 6) Confirm DAG and mounted paths
+---
 
-In Airflow UI:
+## Step 5 — Verify the setup
 
-- Verify DAG dbt_snowflake_pipeline appears.
-- Verify it is not paused.
-
-In container shell (optional verification):
+Confirm the dbt project is mounted correctly inside the worker:
 
 ```bash
 docker compose exec airflow-worker ls -la /home/airflow/gcs/data/dbt_airflow_test
 ```
 
-You should see dbt_project.yml and project folders.
+You should see `dbt_project.yml` and the `models/`, `seeds/` folders.
 
-## 7) DAG task flow and why it matters
+---
 
-Current flow is:
+## Step 6 — Trigger the DAG and validate
 
-- dbt_deps -> dbt_seed -> dbt_run -> dbt_test
+1. In the Airflow UI, find the DAG **`dbt_snowflake_pipeline`** and unpause it
+2. Click **Trigger DAG** (play button)
+3. The tasks run in this order:
 
-This order is correct for your project because model customer_seed_view.sql references seed customer_seed through ref().
+   ```
+   dbt_deps → dbt_seed → dbt_run → dbt_test
+   ```
 
-> **Note:** `dbt debug` is intentionally skipped in the local setup. Running it locally caused git permissions errors, likely because dbt tries to resolve the git remote for version checks and the container environment does not have the necessary git credentials configured. It is safe to skip for local development — `dbt debug` is a connectivity/validity check and not required for model execution.
+   - `dbt_deps` — installs any dbt packages
+   - `dbt_seed` — loads `seeds/customer_seed.csv` into Snowflake
+   - `dbt_run` — builds the `customer_seed_view` model
+   - `dbt_test` — runs dbt tests
 
-## 8) Trigger and validate
+4. Click each task to view its logs
+5. Verify the resulting table/view in your Snowflake schema
 
-1. Trigger the DAG manually in Airflow UI.
-2. Check each task log:
-   - dbt_deps
-   - dbt_seed
-   - dbt_run
-   - dbt_test
-3. Validate resulting objects in Snowflake schema configured by variables.
+> **Note:** `dbt debug` is intentionally skipped. Running it inside the container causes git permission errors because the container has no git credentials. It is safe to skip — it is only a connectivity check.
 
-## 9) Local troubleshooting
+---
 
-### 9.1 dbt command not found in task logs
+## Troubleshooting
 
-Cause:
+| Symptom | Cause | Fix |
+|---|---|---|
+| `dbt: command not found` in task logs | dbt not installed in the image | Run `docker compose build --no-cache` and restart |
+| `MessageToJson() unexpected keyword argument` | protobuf 6.x installed | Pin `protobuf>=4.25,<6` in `Dockerfile` and rebuild |
+| `profiles.yml not found` | Wrong working dir in BashOperator | Ensure task uses `cd /home/airflow/gcs/data/dbt_airflow_test && dbt ... --profiles-dir .` |
+| Snowflake auth errors | Wrong variable values or missing Snowflake grants | Check **Admin → Variables** and verify role/warehouse/schema grants in Snowflake |
+| DAG not visible in UI | DAG parse/import error | Run `docker compose logs airflow-scheduler --tail=200` to see the error |
 
-- dbt package not installed in Airflow containers.
+---
 
-Fix:
-
-- Rebuild image (Option A) or update _PIP_ADDITIONAL_REQUIREMENTS (Option B), then restart containers.
-
-### 9.2 protobuf / MessageToJson errors
-
-Cause:
-
-- protobuf 6.x installed.
-
-Fix:
-
-- Pin protobuf to >=4.25,<6 and restart/rebuild containers.
-
-### 9.3 dbt cannot find profiles.yml
-
-Cause:
-
-- Wrong working directory or profiles-dir flag.
-
-Fix:
-
-- Ensure BashOperator uses:
-  - cd /home/airflow/gcs/data/dbt_airflow_test
-  - --profiles-dir .
-
-### 9.4 Snowflake login/permission failures
-
-Cause:
-
-- Wrong variables or missing grants in Snowflake.
-
-Fix:
-
-- Validate Airflow Variables and Snowflake grants for role, warehouse, database, and schema.
-
-### 9.5 DAG not visible in UI
-
-Cause:
-
-- DAG parse/import error.
-
-Fix:
-
-- Inspect scheduler logs:
-
-```bash
-docker compose logs airflow-scheduler --tail=200
-```
-
-## 10) Suggested production-hardening steps
-
-- Add retries and retry_delay in DAG default_args.
-- Add on_failure callbacks or alerts.
-- Keep credentials out of plain Airflow Variables when possible.
-- Use dbt selectors for targeted runs.
-- Keep local and Composer package versions aligned.
-
-## 11) Useful local commands
+## Useful commands
 
 ```bash
 # Stop all services
 docker compose down
 
-# Stop and remove volumes (fresh reset)
+# Stop and remove all volumes (full reset)
 docker compose down -v
 
-# Rebuild images after dependency changes
+# Rebuild image after changing Dockerfile or dependencies
 docker compose build --no-cache
 
-# Follow worker logs
+# Follow worker logs (see dbt output)
 docker compose logs -f airflow-worker
 
-# Follow scheduler logs
+# Follow scheduler logs (see DAG parse errors)
 docker compose logs -f airflow-scheduler
 ```
