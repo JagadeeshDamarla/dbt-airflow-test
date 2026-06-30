@@ -80,7 +80,7 @@ jobs:
       - name: Deploy Cloud Workflow
         run: |
           gcloud workflows deploy ${{ env.WORKFLOW_NAME }} \
-            --source=workflow.yaml \
+            --source=config/workflow.yaml \
             --location=${{ env.GAR_LOCATION }}
 
       # 7. Trigger the Workflow to Run Immediately
