@@ -1,0 +1,67 @@
+# workflow.yaml
+# Orchestrates the execution of the dbt Cloud Run Job.
+
+main:
+  params: [args]
+  steps:
+    - init_variables:
+        assign:
+          - project_id: ${sys.get_env("GOOGLE_CLOUD_PROJECT_ID")}
+          - region: "us-central1"
+          # This matches the JOB_NAME in your GitHub Actions env block
+          - job_name: "dbt-snowflake-production-job" 
+
+    # 1. Execute the Cloud Run Job with Error Handling
+    - run_job_block:
+        try:
+          steps:
+            # Trigger the Cloud Run Job
+            - trigger_cloud_run_job:
+                call: http.post
+                args:
+                  url: ${"https://run.googleapis.com/v2/projects/" + project_id + "/locations/" + region + "/jobs/" + job_name + ":run"}
+                  auth:
+                    type: OAuth2
+                result: job_execution_response
+
+            # 2. Wait for the job to finish (Polling)
+            - check_job_status:
+                call: http.get
+                args:
+                  # This hits the 'Operations' API endpoint returned by the trigger step
+                  url: ${"https://run.googleapis.com/v2/" + job_execution_response.body.name}
+                  auth:
+                    type: OAuth2
+                result: execution_status
+
+            # 3. Evaluate the state of the long-running operation
+            - evaluate_status:
+                switch:
+                  # Condition A: Operation is still running (done is false or missing)
+                  - condition: ${not("done" in execution_status.body) or not(execution_status.body.done)}
+                    steps:
+                      - sleep:
+                          call: sys.sleep
+                          args:
+                            seconds: 30
+                      - loop_back:
+                          next: check_job_status
+                  
+                  # Condition B: Cloud Run infrastructure failed (e.g., timeout, out of memory)
+                  - condition: ${"error" in execution_status.body}
+                    steps:
+                      - raise_infrastructure_error:
+                          raise: ${execution_status.body.error}
+
+                  # Condition C: Container ran, but dbt failed internally (non-zero exit code)
+                  - condition: ${"response" in execution_status.body and "failedCount" in execution_status.body.response and execution_status.body.response.failedCount > 0}
+                    steps:
+                      - raise_execution_error:
+                          raise: "Cloud Run Job container exited with a failure."
+
+        # Catch any raised failures and fail the workflow run explicitly
+        except:
+          as: e
+          steps:
+            - fail_workflow:
+                raise: ${e}

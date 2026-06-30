@@ -11,8 +11,8 @@ env:
   REPOSITORY: "dbt-images"
   IMAGE_NAME: "dbt-snowflake"
   JOB_NAME: "dbt-snowflake-production-job"
-  WORKFLOW_NAME: "dbt-orchestrator"
   WIF_PROVIDER: "projects/995265336172/locations/global/workloadIdentityPools/github-dbt-pool/providers/github-dbt-provider"
+  #  FIXED: Replaced the placeholder with your actual project ID
   GCP_SERVICE_ACCOUNT: "github-actions-dbt@new-map-project-1538399427267.iam.gserviceaccount.com"
 
 jobs:
@@ -54,12 +54,14 @@ jobs:
           echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
           docker build -t $IMAGE_TAG ./dbt_airflow_test
 
+      # ... Keep steps 4, 5, and 6 exactly the same as you have them!
+
       # 4. Push the Image to Google Cloud Artifact Registry
       - name: Push Image to Registry
         run: |
           docker push ${{ env.IMAGE_TAG }}
 
-      # 5. Create or Update the Cloud Run Job (Points Job to the New Image!)
+      # 5. Create or Update the Cloud Run Job with Snowflake Production Credentials
       - name: Deploy Cloud Run Job
         uses: google-github-actions/deploy-cloudrun@v3
         with:
@@ -76,16 +78,7 @@ jobs:
             SNOWFLAKE_WAREHOUSE=${{ secrets.SNOWFLAKE_WAREHOUSE }}
             SNOWFLAKE_SCHEMA=${{ secrets.SNOWFLAKE_SCHEMA }}
 
-      # 6. Deploy the latest Workflows YAML to Google Cloud
-      - name: Deploy Cloud Workflow
+      # 6. Trigger the Job to Run Immediately
+      - name: Execute Cloud Run Job
         run: |
-          gcloud workflows deploy ${{ env.WORKFLOW_NAME }} \
-            --source=workflow.yaml \
-            --location=${{ env.GAR_LOCATION }}
-
-      # 7. Trigger the Workflow to Run Immediately
-      # Using 'run' instead of 'execute' makes GitHub wait synchronously for the Workflow to succeed/fail
-      - name: Execute Cloud Workflow
-        run: |
-          gcloud workflows run ${{ env.WORKFLOW_NAME }} \
-            --location=${{ env.GAR_LOCATION }}
+          gcloud run jobs execute ${{ env.JOB_NAME }} --region=${{ env.GAR_LOCATION }} --wait

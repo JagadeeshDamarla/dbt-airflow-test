@@ -1,7 +1,7 @@
 {{ config(materialized='view') }}
 
 -- cte in view.      
-with customer_info as   
+with customer_info as (
 
     select *
     from {{ ref('customer_seed_view') }}
