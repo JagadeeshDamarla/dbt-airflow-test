@@ -15,9 +15,17 @@ main:
           - now_ts: ${sys.now()}
           - default_from_date: ${text.substring(time.format(now_ts), 0, 10)}
           - default_to_date: ${text.substring(time.format(now_ts - 86400), 0, 10)}
-          - input_dbt_params: ${default(map.get(args, "dbt_params"), {})}
-          - dbt_from_date: ${default(map.get(input_dbt_params, "from_date"), default_from_date)}
-          - dbt_to_date: ${default(map.get(input_dbt_params, "to_date"), default_to_date)}
+          - dbt_from_date: ${default_from_date}
+          - dbt_to_date: ${default_to_date}
+
+    - apply_dbt_param_overrides:
+        switch:
+          - condition: ${"dbt_params" in args}
+            steps:
+              - set_dbt_param_overrides:
+                  assign:
+                    - dbt_from_date: ${default(map.get(args.dbt_params, "from_date"), dbt_from_date)}
+                    - dbt_to_date: ${default(map.get(args.dbt_params, "to_date"), dbt_to_date)}
 
     - log_effective_dbt_dates:
         call: sys.log
