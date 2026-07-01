@@ -64,6 +64,7 @@ main:
                   region: ${region}
                   operation: "pending"
                   workflow_execution: ${sys.get_env("GOOGLE_CLOUD_WORKFLOW_EXECUTION_ID")}
+                  failure_reason: ""
                 result: slack_start_payload
             - post_start_message:
                 call: http.post
@@ -128,6 +129,16 @@ main:
                             seconds: 30
                       - loop_back:
                           next: check_job_status
+
+                  # Condition A2: Wait for completion metadata to become available
+                  - condition: ${not("response" in execution_status.body) or not("completionTime" in execution_status.body.response)}
+                    steps:
+                      - sleep_for_completion:
+                          call: sys.sleep
+                          args:
+                            seconds: 30
+                      - loop_back_for_completion:
+                          next: check_job_status
                   
                   # Condition B: Cloud Run infrastructure failed (e.g., timeout, out of memory)
                   - condition: ${"error" in execution_status.body}
@@ -139,13 +150,13 @@ main:
                   - condition: ${"response" in execution_status.body and "failedCount" in execution_status.body.response and execution_status.body.response.failedCount > 0}
                     steps:
                       - raise_execution_error:
-                          raise: "Cloud Run Job container exited with a failure."
+                          raise: '${"Cloud Run Job container exited with a failure. Final response: " + json.encode_to_string(execution_status.body.response)}'
 
                   # Condition D: Operation finished but not explicitly successful
                   - condition: ${not("response" in execution_status.body and "succeededCount" in execution_status.body.response and execution_status.body.response.succeededCount > 0)}
                     steps:
                       - raise_non_success_completion:
-                          raise: ${"Cloud Run Job completed without explicit success. Final response: " + json.encode_to_string(execution_status.body)}
+                          raise: '${"Cloud Run Job completed without explicit success. Final response: " + json.encode_to_string(execution_status.body)}'
 
             - notify_slack_success:
                 try:
@@ -159,6 +170,7 @@ main:
                           region: ${region}
                           operation: ${operation_name}
                           workflow_execution: ${sys.get_env("GOOGLE_CLOUD_WORKFLOW_EXECUTION_ID")}
+                          failure_reason: ""
                         result: slack_success_payload
                     - post_success_message:
                         call: http.post
@@ -192,6 +204,7 @@ main:
                           region: ${region}
                           operation: ${default(operation_name, "unknown")}
                           workflow_execution: ${sys.get_env("GOOGLE_CLOUD_WORKFLOW_EXECUTION_ID")}
+                          failure_reason: ${json.encode_to_string(e)}
                         result: slack_failure_payload
                     - post_failure_message:
                         call: http.post
@@ -212,7 +225,7 @@ main:
                 raise: ${e}
 
 build_slack_payload:
-  params: [notification_template, job_name, status, region, operation, workflow_execution]
+  params: [notification_template, job_name, status, region, operation, workflow_execution, failure_reason]
   steps:
     - choose_status_icon:
         switch:
@@ -221,16 +234,19 @@ build_slack_payload:
               - set_success_icon:
                   assign:
                     - status_icon: ${notification_template.status_icons.success}
+                    - status_detail: ""
           - condition: ${status == "failure"}
             steps:
               - set_failure_icon:
                   assign:
                     - status_icon: ${notification_template.status_icons.failure}
+                    - status_detail: ${"\n*reason:* " + default(failure_reason, "unknown")}
           - condition: true
             steps:
               - set_started_icon:
                   assign:
                     - status_icon: ${notification_template.status_icons.started}
+                    - status_detail: ""
 
     - render_payload:
         assign:
@@ -245,7 +261,7 @@ build_slack_payload:
                 - type: "section"
                   text:
                     type: "mrkdwn"
-                    text: ${status_icon + " *status:* " + status}
+                    text: ${status_icon + " *status:* " + status + status_detail}
                 - type: "section"
                   fields:
                     - type: "mrkdwn"
