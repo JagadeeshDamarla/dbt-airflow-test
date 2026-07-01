@@ -10,7 +10,8 @@ main:
           - region: "us-central1"
           # This matches the JOB_NAME in your GitHub Actions env block
           - job_name: "dbt-snowflake-production-job"
-          - slack_webhook_secret_resource: "projects/995265336172/secrets/SLACK_WEBHOOK"
+          - notification_template: ${args.notification_template}
+          - slack_webhook_secret_resource: ${notification_template.slack_webhook_secret_resource}
 
     - load_slack_webhook_secret:
         call: googleapis.secretmanager.v1.projects.secrets.versions.access
@@ -25,14 +26,23 @@ main:
     - notify_slack_start:
         try:
           steps:
+            - build_start_payload:
+                call: build_slack_payload
+                args:
+                  notification_template: ${notification_template}
+                  job_name: ${job_name}
+                  status: "started"
+                  region: ${region}
+                  operation: "pending"
+                  workflow_execution: ${sys.get_env("GOOGLE_CLOUD_WORKFLOW_EXECUTION_ID")}
+                result: slack_start_payload
             - post_start_message:
                 call: http.post
                 args:
                   url: ${slack_webhook_url}
                   headers:
                     Content-Type: "application/json"
-                  body:
-                    text: ${job_name + " started | project=" + project_id + " | region=" + region + " | workflow_execution=" + sys.get_env("GOOGLE_CLOUD_WORKFLOW_EXECUTION_ID")}
+                  body: ${slack_start_payload}
         except:
           as: slack_start_error
           steps:
@@ -97,14 +107,23 @@ main:
             - notify_slack_success:
                 try:
                   steps:
+                    - build_success_payload:
+                        call: build_slack_payload
+                        args:
+                          notification_template: ${notification_template}
+                          job_name: ${job_name}
+                          status: "success"
+                          region: ${region}
+                          operation: ${operation_name}
+                          workflow_execution: ${sys.get_env("GOOGLE_CLOUD_WORKFLOW_EXECUTION_ID")}
+                        result: slack_success_payload
                     - post_success_message:
                         call: http.post
                         args:
                           url: ${slack_webhook_url}
                           headers:
                             Content-Type: "application/json"
-                          body:
-                            text: ${job_name + " success | project=" + project_id + " | region=" + region + " | operation=" + operation_name + " | workflow_execution=" + sys.get_env("GOOGLE_CLOUD_WORKFLOW_EXECUTION_ID")}
+                          body: ${slack_success_payload}
                 except:
                   as: slack_success_error
                   steps:
@@ -121,14 +140,23 @@ main:
             - notify_slack_failure:
                 try:
                   steps:
+                    - build_failure_payload:
+                        call: build_slack_payload
+                        args:
+                          notification_template: ${notification_template}
+                          job_name: ${job_name}
+                          status: "failure"
+                          region: ${region}
+                          operation: ${default(operation_name, "unknown")}
+                          workflow_execution: ${sys.get_env("GOOGLE_CLOUD_WORKFLOW_EXECUTION_ID")}
+                        result: slack_failure_payload
                     - post_failure_message:
                         call: http.post
                         args:
                           url: ${slack_webhook_url}
                           headers:
                             Content-Type: "application/json"
-                          body:
-                            text: '${job_name + " failed | project=" + project_id + " | region=" + region + " | operation=" + default(operation_name, "unknown") + " | workflow_execution=" + sys.get_env("GOOGLE_CLOUD_WORKFLOW_EXECUTION_ID") + " | error=" + json.encode_to_string(e)}'
+                          body: ${slack_failure_payload}
                 except:
                   as: slack_failure_error
                   steps:
@@ -139,3 +167,50 @@ main:
                           text: '${"Slack failure notification failed: " + json.encode_to_string(slack_failure_error)}'
             - fail_workflow:
                 raise: ${e}
+
+build_slack_payload:
+  params: [notification_template, job_name, status, region, operation, workflow_execution]
+  steps:
+    - choose_status_icon:
+        switch:
+          - condition: ${status == "success"}
+            steps:
+              - set_success_icon:
+                  assign:
+                    - status_icon: ${notification_template.status_icons.success}
+          - condition: ${status == "failure"}
+            steps:
+              - set_failure_icon:
+                  assign:
+                    - status_icon: ${notification_template.status_icons.failure}
+          - condition: true
+            steps:
+              - set_started_icon:
+                  assign:
+                    - status_icon: ${notification_template.status_icons.started}
+
+    - render_payload:
+        assign:
+          - payload:
+              text: ${job_name + " | " + status}
+              blocks:
+                - type: "header"
+                  text:
+                    type: "plain_text"
+                    text: ${job_name}
+                    emoji: true
+                - type: "section"
+                  text:
+                    type: "mrkdwn"
+                    text: ${status_icon + " *status:* " + status}
+                - type: "section"
+                  fields:
+                    - type: "mrkdwn"
+                      text: ${"*" + notification_template.attributes.region + ":*\n" + region}
+                    - type: "mrkdwn"
+                      text: ${"*" + notification_template.attributes.operation + ":*\n" + operation}
+                    - type: "mrkdwn"
+                      text: ${"*" + notification_template.attributes.workflow_execution + ":*\n" + workflow_execution}
+
+    - return_payload:
+        return: ${payload}

@@ -13,6 +13,7 @@ env:
   JOB_NAME: "dbt-snowflake-production-job"
   DBT_LOG_BUCKET: "dbt_logs_test_2026"
   WORKFLOW_NAME: "dbt-orchestrator"
+  NOTIFICATION_TEMPLATE_PATH: "config/slack_payload_template.json"
   WIF_PROVIDER: "projects/995265336172/locations/global/workloadIdentityPools/github-dbt-pool/providers/github-dbt-provider"
   GCP_SERVICE_ACCOUNT: "github-actions-dbt@new-map-project-1538399427267.iam.gserviceaccount.com"
   WORKFLOW_RUNTIME_SERVICE_ACCOUNT: "github-actions-dbt@new-map-project-1538399427267.iam.gserviceaccount.com"
@@ -91,5 +92,19 @@ jobs:
       # Using 'run' instead of 'execute' makes GitHub wait synchronously for the Workflow to succeed/fail
       - name: Execute Cloud Workflow
         run: |
+          python - <<'PY' > /tmp/workflow_args.json
+          import json
+          import os
+
+          with open(os.environ["NOTIFICATION_TEMPLATE_PATH"], "r", encoding="utf-8") as f:
+              template = json.load(f)
+
+          args = {
+              "notification_template": template
+          }
+          print(json.dumps(args, separators=(",", ":")))
+          PY
+
           gcloud workflows run ${{ env.WORKFLOW_NAME }} \
-            --location=${{ env.GAR_LOCATION }}
+            --location=${{ env.GAR_LOCATION }} \
+            --data="$(cat /tmp/workflow_args.json)"

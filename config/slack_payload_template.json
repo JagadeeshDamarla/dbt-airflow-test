@@ -1,0 +1,14 @@
+{
+  "provider": "slack",
+  "slack_webhook_secret_resource": "projects/995265336172/secrets/SLACK_WEBHOOK",
+  "attributes": {
+    "region": "region",
+    "operation": "operation",
+    "workflow_execution": "workflow_execution"
+  },
+  "status_icons": {
+    "started": ":information_source:",
+    "success": ":white_check_mark:",
+    "failure": ":x:"
+  }
+}
