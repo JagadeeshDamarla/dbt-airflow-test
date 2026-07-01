@@ -3,7 +3,7 @@
 {% set from_date = var('from_date') %}
 {% set to_date = var('to_date') %}
 
--- cte in view.   
+-- cte in view.     
 with customer_info as ( 
 
     select *
