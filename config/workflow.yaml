@@ -19,11 +19,11 @@ main:
           - dbt_from_date: ${default(map.get(input_dbt_params, "from_date"), default_from_date)}
           - dbt_to_date: ${default(map.get(input_dbt_params, "to_date"), default_to_date)}
 
-        - log_effective_dbt_dates:
-          call: sys.log
-          args:
-            severity: "INFO"
-            text: ${"Effective dbt date params: from_date=" + dbt_from_date + ", to_date=" + dbt_to_date}
+    - log_effective_dbt_dates:
+        call: sys.log
+        args:
+          severity: "INFO"
+          text: '${"Effective dbt date params: from_date=" + dbt_from_date + ", to_date=" + dbt_to_date}'
 
     - load_slack_webhook_secret:
         call: googleapis.secretmanager.v1.projects.secrets.versions.access
