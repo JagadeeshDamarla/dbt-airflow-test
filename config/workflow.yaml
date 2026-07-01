@@ -40,7 +40,7 @@ main:
                 call: sys.log
                 args:
                   severity: "WARNING"
-                  text: ${"Slack start notification failed: " + string(slack_start_error)}
+                  text: '${"Slack start notification failed: " + json.encode_to_string(slack_start_error)}'
 
     # 1. Execute the Cloud Run Job with Error Handling
     - run_job_block:
@@ -112,7 +112,7 @@ main:
                         call: sys.log
                         args:
                           severity: "WARNING"
-                          text: ${"Slack success notification failed: " + string(slack_success_error)}
+                          text: '${"Slack success notification failed: " + json.encode_to_string(slack_success_error)}'
 
         # Catch any raised failures and fail the workflow run explicitly
         except:
@@ -128,7 +128,7 @@ main:
                           headers:
                             Content-Type: "application/json"
                           body:
-                            text: ${job_name + " failed | project=" + project_id + " | region=" + region + " | operation=" + default(operation_name, "unknown") + " | workflow_execution=" + sys.get_env("GOOGLE_CLOUD_WORKFLOW_EXECUTION_ID") + " | error=" + string(e)}
+                            text: '${job_name + " failed | project=" + project_id + " | region=" + region + " | operation=" + default(operation_name, "unknown") + " | workflow_execution=" + sys.get_env("GOOGLE_CLOUD_WORKFLOW_EXECUTION_ID") + " | error=" + json.encode_to_string(e)}'
                 except:
                   as: slack_failure_error
                   steps:
@@ -136,6 +136,6 @@ main:
                         call: sys.log
                         args:
                           severity: "WARNING"
-                          text: ${"Slack failure notification failed: " + string(slack_failure_error)}
+                          text: '${"Slack failure notification failed: " + json.encode_to_string(slack_failure_error)}'
             - fail_workflow:
                 raise: ${e}
