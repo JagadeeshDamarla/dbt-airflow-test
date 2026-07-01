@@ -4,6 +4,16 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
+    inputs:
+      from_date:
+        description: "Start date (YYYY-MM-DD)"
+        required: true
+        type: string
+      to_date:
+        description: "End date (YYYY-MM-DD)"
+        required: true
+        type: string
 
 env:
   PROJECT_ID: "new-map-project-1538399427267"
@@ -91,6 +101,9 @@ jobs:
       # 7. Trigger the Workflow to Run Immediately
       # Using 'run' instead of 'execute' makes GitHub wait synchronously for the Workflow to succeed/fail
       - name: Execute Cloud Workflow
+        env:
+          DBT_FROM_DATE: ${{ github.event.inputs.from_date || vars.DBT_FROM_DATE }}
+          DBT_TO_DATE: ${{ github.event.inputs.to_date || vars.DBT_TO_DATE }}
         run: |
           python - <<'PY' > /tmp/workflow_args.json
           import json
@@ -100,7 +113,11 @@ jobs:
               template = json.load(f)
 
           args = {
-              "notification_template": template
+              "notification_template": template,
+              "dbt_params": {
+                "from_date": os.environ["DBT_FROM_DATE"],
+                  "to_date": os.environ["DBT_TO_DATE"],
+              }
           }
           print(json.dumps(args, separators=(",", ":")))
           PY

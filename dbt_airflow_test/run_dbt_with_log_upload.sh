@@ -5,9 +5,33 @@ set -u
 DBT_DIR="/usr/app/dbt"
 DBT_EXIT_CODE=0
 
+build_dbt_vars_json() {
+  python - <<'PY'
+import json
+import os
+
+vars_payload = {}
+from_date = os.getenv("DBT_FROM_DATE", "").strip()
+to_date = os.getenv("DBT_TO_DATE", "").strip()
+
+if not from_date or not to_date:
+  raise SystemExit("DBT_FROM_DATE and DBT_TO_DATE are required.")
+
+vars_payload["from_date"] = from_date
+vars_payload["to_date"] = to_date
+
+print(json.dumps(vars_payload, separators=(",", ":")))
+PY
+}
+
 run_dbt() {
   cd "$DBT_DIR" || return 1
-  dbt build
+
+  local dbt_vars_json
+  dbt_vars_json="$(build_dbt_vars_json)"
+  echo "Running dbt build with vars: ${dbt_vars_json}"
+
+  dbt build --vars "$dbt_vars_json"
 }
 
 upload_logs_to_gcs() {

@@ -12,6 +12,9 @@ main:
           - job_name: "dbt-snowflake-production-job"
           - notification_template: ${args.notification_template}
           - slack_webhook_secret_resource: ${notification_template.slack_webhook_secret_resource}
+          - dbt_params: ${args.dbt_params}
+          - dbt_from_date: ${dbt_params.from_date}
+          - dbt_to_date: ${dbt_params.to_date}
 
     - load_slack_webhook_secret:
         call: googleapis.secretmanager.v1.projects.secrets.versions.access
@@ -63,6 +66,14 @@ main:
                   url: ${"https://run.googleapis.com/v2/projects/" + project_id + "/locations/" + region + "/jobs/" + job_name + ":run"}
                   auth:
                     type: OAuth2
+                  body:
+                    overrides:
+                      containerOverrides:
+                        - env:
+                            - name: "DBT_FROM_DATE"
+                              value: ${dbt_from_date}
+                            - name: "DBT_TO_DATE"
+                              value: ${dbt_to_date}
                 result: job_execution_response
 
             - capture_operation_name:
