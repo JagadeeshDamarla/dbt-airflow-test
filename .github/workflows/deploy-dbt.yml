@@ -15,6 +15,7 @@ env:
   WORKFLOW_NAME: "dbt-orchestrator"
   WIF_PROVIDER: "projects/995265336172/locations/global/workloadIdentityPools/github-dbt-pool/providers/github-dbt-provider"
   GCP_SERVICE_ACCOUNT: "github-actions-dbt@new-map-project-1538399427267.iam.gserviceaccount.com"
+  WORKFLOW_RUNTIME_SERVICE_ACCOUNT: "github-actions-dbt@new-map-project-1538399427267.iam.gserviceaccount.com"
 
 jobs:
   build-and-deploy:
@@ -83,7 +84,8 @@ jobs:
         run: |
           gcloud workflows deploy ${{ env.WORKFLOW_NAME }} \
             --source=config/workflow.yaml \
-            --location=${{ env.GAR_LOCATION }}
+            --location=${{ env.GAR_LOCATION }} \
+            --service-account=${{ env.WORKFLOW_RUNTIME_SERVICE_ACCOUNT }}
 
       # 7. Trigger the Workflow to Run Immediately
       # Using 'run' instead of 'execute' makes GitHub wait synchronously for the Workflow to succeed/fail

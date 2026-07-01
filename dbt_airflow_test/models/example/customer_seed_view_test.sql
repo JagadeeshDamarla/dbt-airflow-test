@@ -1,6 +1,6 @@
 {{ config(materialized='view') }}
 
--- cte in view.      test. 
+-- cte in view.      test.   
 with customer_info as ( 
 
     select *
