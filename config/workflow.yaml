@@ -27,11 +27,20 @@ main:
                     - dbt_from_date: ${default(map.get(args.dbt_params, "from_date"), dbt_from_date)}
                     - dbt_to_date: ${default(map.get(args.dbt_params, "to_date"), dbt_to_date)}
 
-    - log_effective_dbt_dates:
-        call: sys.log
-        args:
-          severity: "INFO"
-          text: '${"Effective dbt date params: from_date=" + dbt_from_date + ", to_date=" + dbt_to_date}'
+    - try_log_effective_dbt_dates:
+        try:
+          steps:
+            - log_effective_dbt_dates:
+                call: sys.log
+                args:
+                  severity: "INFO"
+                  text: '${"Effective dbt date params: from_date=" + dbt_from_date + ", to_date=" + dbt_to_date}'
+        except:
+          as: log_effective_dbt_dates_error
+          steps:
+            - ignore_log_permission_error:
+                assign:
+                  - _ignored_log_error: ${log_effective_dbt_dates_error}
 
     - load_slack_webhook_secret:
         call: googleapis.secretmanager.v1.projects.secrets.versions.access
@@ -131,6 +140,12 @@ main:
                     steps:
                       - raise_execution_error:
                           raise: "Cloud Run Job container exited with a failure."
+
+                  # Condition D: Operation finished but not explicitly successful
+                  - condition: ${not("response" in execution_status.body and "succeededCount" in execution_status.body.response and execution_status.body.response.succeededCount > 0)}
+                    steps:
+                      - raise_non_success_completion:
+                          raise: ${"Cloud Run Job completed without explicit success. Final response: " + json.encode_to_string(execution_status.body)}
 
             - notify_slack_success:
                 try:
